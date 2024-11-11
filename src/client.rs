@@ -246,7 +246,9 @@ impl Iterator for ClientConnection {
                 .headers()
                 .iter()
                 .find(|h| h.field == "Connection")
-                .map(|h| h.value.as_str());
+                // TODO(cosmic): silently discarding anything other than visible ASCII chars
+                // https://github.com/tiny-http/tiny-http/issues/267
+                .and_then(|h| h.value.to_str().ok());
 
             let lowercase = connection_header.map(|h| h.to_ascii_lowercase());
 

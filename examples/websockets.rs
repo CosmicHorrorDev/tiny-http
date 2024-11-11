@@ -95,7 +95,8 @@ fn main() {
                 .headers()
                 .iter()
                 .find(|h| h.field == "Sec-WebSocket-Key")
-                .map(|h| h.value.clone())
+                // XXX(cosmic): silently ignore non-ascii
+                .and_then(|h| h.value.to_str().ok())
             {
                 None => {
                     let response = tiny_http::Response::new_empty(http::StatusCode::BAD_REQUEST);
@@ -115,7 +116,7 @@ fn main() {
                         .unwrap(),
                 )
                 .with_header(
-                    format!("Sec-WebSocket-Accept: {}", convert_key(key.as_str()))
+                    format!("Sec-WebSocket-Accept: {}", convert_key(key))
                         .parse::<tiny_http::Header>()
                         .unwrap(),
                 );

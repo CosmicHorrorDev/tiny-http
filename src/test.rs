@@ -1,6 +1,5 @@
 use crate::{request::new_request, HTTPVersion, Header, Request};
-use ascii::AsciiString;
-use http::{HeaderName, Method};
+use http::{HeaderName, HeaderValue, Method};
 use std::net::SocketAddr;
 
 /// A simpler version of [`Request`] that is useful for testing. No data actually goes anywhere.
@@ -63,7 +62,7 @@ impl From<TestRequest> for Request {
         {
             mock.headers.push(Header {
                 field: HeaderName::from_static("content-length"),
-                value: AsciiString::from_ascii(mock.body.len().to_string()).unwrap(),
+                value: HeaderValue::from_str(&mock.body.len().to_string()).unwrap(),
             });
         }
         new_request(

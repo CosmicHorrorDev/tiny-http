@@ -1,4 +1,4 @@
-use ascii::AsciiString;
+use http::HeaderValue;
 use std::fs;
 use std::path::Path;
 
@@ -45,7 +45,7 @@ fn main() {
 
             let response = response.with_header(tiny_http::Header {
                 field: "Content-Type".parse().unwrap(),
-                value: AsciiString::from_ascii(get_content_type(&path)).unwrap(),
+                value: HeaderValue::from_str(get_content_type(&path)).unwrap(),
             });
 
             let _ = rq.respond(response);

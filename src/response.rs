@@ -99,7 +99,7 @@ where
     for header in headers.iter() {
         writer.write_all(header.field.as_str().as_ref())?;
         write!(&mut writer, ": ")?;
-        writer.write_all(header.value.as_str().as_ref())?;
+        writer.write_all(header.value.as_bytes())?;
         write!(&mut writer, "\r\n")?;
     }
 
@@ -137,11 +137,11 @@ fn choose_transfer_encoding(
         // finding TE
         .find(|h| h.field == "TE")
         // getting its value
-        .map(|h| h.value.clone())
+        .and_then(|h| h.value.to_str().ok()) // TODO: remove conversion
         // getting the corresponding TransferEncoding
         .and_then(|value| {
             // getting list of requested elements
-            let mut parse = util::parse_header_value(value.as_str()); // TODO: remove conversion
+            let mut parse = util::parse_header_value(value);
 
             // sorting elements by most priority
             parse.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
@@ -265,7 +265,7 @@ where
 
         // if the header is Content-Length, setting the data length
         if header.field == "Content-Length" {
-            if let Ok(val) = usize::from_str(header.value.as_str()) {
+            if let Some(val) = header.value.to_str().ok().and_then(|v| usize::from_str(v).ok()) {
                 self.data_length = Some(val)
             }
 
