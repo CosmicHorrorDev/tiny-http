@@ -74,7 +74,7 @@ fn main() {
             match request
                 .headers()
                 .iter()
-                .find(|h| h.field.equiv(&"Upgrade"))
+                .find(|h| h.field== "Upgrade")
                 .and_then(|hdr| {
                     if hdr.value == "websocket" {
                         Some(hdr)
@@ -94,7 +94,7 @@ fn main() {
             let key = match request
                 .headers()
                 .iter()
-                .find(|h| h.field.equiv(&"Sec-WebSocket-Key"))
+                .find(|h| h.field == "Sec-WebSocket-Key")
                 .map(|h| h.value.clone())
             {
                 None => {

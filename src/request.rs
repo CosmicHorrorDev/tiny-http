@@ -144,7 +144,7 @@ where
     // finding the transfer-encoding header
     let transfer_encoding = headers
         .iter()
-        .find(|h: &&Header| h.field.equiv("Transfer-Encoding"))
+        .find(|h: &&Header| h.field == "Transfer-Encoding")
         .map(|h| h.value.clone());
 
     // finding the content-length header
@@ -155,7 +155,7 @@ where
     } else {
         headers
             .iter()
-            .find(|h: &&Header| h.field.equiv("Content-Length"))
+            .find(|h: &&Header| h.field == "Content-Length")
             .and_then(|h| FromStr::from_str(h.value.as_str()).ok())
     };
 
@@ -163,7 +163,7 @@ where
     let expects_continue = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field.equiv("Expect"))
+            .find(|h: &&Header| h.field == "Expect")
             .map(|h| h.value.as_str())
         {
             None => false,
@@ -176,7 +176,7 @@ where
     let connection_upgrade = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field.equiv("Connection"))
+            .find(|h: &&Header| h.field == "Connection")
             .map(|h| h.value.as_str())
         {
             Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,

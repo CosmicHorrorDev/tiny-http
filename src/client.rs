@@ -245,7 +245,7 @@ impl Iterator for ClientConnection {
             let connection_header = rq
                 .headers()
                 .iter()
-                .find(|h| h.field.equiv("Connection"))
+                .find(|h| h.field == "Connection")
                 .map(|h| h.value.as_str());
 
             let lowercase = connection_header.map(|h| h.to_ascii_lowercase());

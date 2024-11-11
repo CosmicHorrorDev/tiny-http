@@ -1,4 +1,5 @@
 use ascii::{AsciiStr, AsciiString, FromAsciiError};
+use http::HeaderName;
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
@@ -6,7 +7,7 @@ use std::str::FromStr;
 /// Represents a HTTP header.
 #[derive(Debug, Clone)]
 pub struct Header {
-    pub field: HeaderField,
+    pub field: HeaderName,
     pub value: AsciiString,
 }
 
@@ -24,7 +25,7 @@ impl Header {
         B1: Into<Vec<u8>> + AsRef<[u8]>,
         B2: Into<Vec<u8>> + AsRef<[u8]>,
     {
-        let header = HeaderField::from_bytes(header).or(Err(()))?;
+        let header = HeaderName::from_bytes(header.as_ref()).or(Err(()))?;
         let value = AsciiString::from_ascii(value).or(Err(()))?;
 
         Ok(Header {
@@ -53,55 +54,6 @@ impl FromStr for Header {
 impl Display for Header {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), fmt::Error> {
         write!(formatter, "{}: {}", self.field, self.value.as_str())
-    }
-}
-
-/// Field of a header (eg. `Content-Type`, `Content-Length`, etc.)
-///
-/// Comparison between two `HeaderField`s ignores case.
-#[derive(Debug, Clone, Eq)]
-pub struct HeaderField(AsciiString);
-
-impl HeaderField {
-    pub fn from_bytes<B>(bytes: B) -> Result<HeaderField, FromAsciiError<B>>
-    where
-        B: Into<Vec<u8>> + AsRef<[u8]>,
-    {
-        AsciiString::from_ascii(bytes).map(HeaderField)
-    }
-
-    pub fn as_str(&self) -> &AsciiStr {
-        &self.0
-    }
-
-    pub fn equiv(&self, other: &'static str) -> bool {
-        other.eq_ignore_ascii_case(self.as_str().as_str())
-    }
-}
-
-impl FromStr for HeaderField {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<HeaderField, ()> {
-        if s.contains(char::is_whitespace) {
-            Err(())
-        } else {
-            AsciiString::from_ascii(s).map(HeaderField).map_err(|_| ())
-        }
-    }
-}
-
-impl Display for HeaderField {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(formatter, "{}", self.0.as_str())
-    }
-}
-
-impl PartialEq for HeaderField {
-    fn eq(&self, other: &HeaderField) -> bool {
-        let self_str: &str = self.as_str().as_ref();
-        let other_str = other.as_str().as_ref();
-        self_str.eq_ignore_ascii_case(other_str)
     }
 }
 
@@ -177,7 +129,7 @@ mod test {
     fn test_parse_header() {
         let header: Header = "Content-Type: text/html".parse().unwrap();
 
-        assert!(header.field.equiv(&"content-type"));
+        assert_eq!(header.field, "content-type");
         assert!(header.value.as_str() == "text/html");
 
         assert!("hello world".parse::<Header>().is_err());
@@ -194,7 +146,7 @@ mod test {
     fn test_parse_header_with_doublecolon() {
         let header: Header = "Time: 20: 34".parse().unwrap();
 
-        assert!(header.field.equiv(&"time"));
+        assert_eq!(header.field, "time");
         assert!(header.value.as_str() == "20: 34");
     }
 

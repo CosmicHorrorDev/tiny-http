@@ -135,7 +135,7 @@ fn choose_transfer_encoding(
     let user_request = request_headers
         .iter()
         // finding TE
-        .find(|h| h.field.equiv("TE"))
+        .find(|h| h.field == "TE")
         // getting its value
         .map(|h| h.value.clone())
         // getting the corresponding TransferEncoding
@@ -255,27 +255,27 @@ where
         let header = header.into();
 
         // ignoring forbidden headers
-        if header.field.equiv("Connection")
-            || header.field.equiv("Trailer")
-            || header.field.equiv("Transfer-Encoding")
-            || header.field.equiv("Upgrade")
+        if header.field == "Connection"
+            || header.field == "Trailer"
+            || header.field == "Transfer-Encoding"
+            || header.field == "Upgrade"
         {
             return;
         }
 
         // if the header is Content-Length, setting the data length
-        if header.field.equiv("Content-Length") {
+        if header.field == "Content-Length" {
             if let Ok(val) = usize::from_str(header.value.as_str()) {
                 self.data_length = Some(val)
             }
 
             return;
         // if the header is Content-Type and it's already set, overwrite it
-        } else if header.field.equiv("Content-Type") {
+        } else if header.field == "Content-Type" {
             if let Some(content_type_header) = self
                 .headers
                 .iter_mut()
-                .find(|h| h.field.equiv("Content-Type"))
+                .find(|h| h.field == "Content-Type")
             {
                 content_type_header.value = header.value;
                 return;
@@ -349,12 +349,12 @@ where
         ));
 
         // add `Date` if not in the headers
-        if !self.headers.iter().any(|h| h.field.equiv("Date")) {
+        if !self.headers.iter().any(|h| h.field == "Date") {
             self.headers.insert(0, build_date_header());
         }
 
         // add `Server` if not in the headers
-        if !self.headers.iter().any(|h| h.field.equiv("Server")) {
+        if !self.headers.iter().any(|h| h.field == "Server") {
             self.headers.insert(
                 0,
                 Header::from_bytes(&b"Server"[..], &b"tiny-http (Rust)"[..]).unwrap(),

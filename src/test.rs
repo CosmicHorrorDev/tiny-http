@@ -1,6 +1,6 @@
-use crate::{request::new_request, HTTPVersion, Header, HeaderField, Request};
+use crate::{request::new_request, HTTPVersion, Header, Request};
 use ascii::AsciiString;
-use http::Method;
+use http::{HeaderName, Method};
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -60,10 +60,10 @@ impl From<TestRequest> for Request {
         if !mock
             .headers
             .iter_mut()
-            .any(|h| h.field.equiv("Content-Length"))
+            .any(|h| h.field == "Content-Length")
         {
             mock.headers.push(Header {
-                field: HeaderField::from_str("Content-Length").unwrap(),
+                field: HeaderName::from_static("content-length"),
                 value: AsciiString::from_ascii(mock.body.len().to_string()).unwrap(),
             });
         }
