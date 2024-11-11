@@ -1,7 +1,5 @@
 #![cfg(unix)]
 
-extern crate tiny_http;
-
 use std::{
     io::{Read, Write},
     os::unix::net::UnixStream,
@@ -30,7 +28,7 @@ fn unix_basic_handling() {
     .unwrap();
 
     let request = server.recv().unwrap();
-    assert!(*request.method() == tiny_http::Method::Get);
+    assert!(*request.method() == http::Method::GET);
     //assert!(request.url() == "/");
     request
         .respond(tiny_http::Response::from_string("hello world".to_owned()))
