@@ -130,7 +130,6 @@ mod ssl;
 mod test;
 mod util;
 
-/// The underlying [`http`] crate that we use.
 pub use http;
 
 /// The main class of this library.
