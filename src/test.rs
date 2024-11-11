@@ -2,7 +2,6 @@ use crate::{request::new_request, HTTPVersion, Header, Request};
 use ascii::AsciiString;
 use http::{HeaderName, Method};
 use std::net::SocketAddr;
-use std::str::FromStr;
 
 /// A simpler version of [`Request`] that is useful for testing. No data actually goes anywhere.
 ///

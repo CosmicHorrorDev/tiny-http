@@ -1,4 +1,4 @@
-use ascii::{AsciiStr, AsciiString, FromAsciiError};
+use ascii::AsciiString;
 use http::HeaderName;
 use std::cmp::Ordering;
 use std::fmt::{self, Display, Formatter};
