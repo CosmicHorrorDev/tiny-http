@@ -100,7 +100,7 @@ fn main() {
                 .headers()
                 .iter()
                 .find(|h| h.field == header::SEC_WEBSOCKET_KEY)
-                .map(|h| h.value.clone())
+                .and_then(|h| h.value.to_str().ok())
             {
                 None => {
                     let response = tiny_http::Response::new_empty(http::StatusCode::BAD_REQUEST);
@@ -116,8 +116,7 @@ fn main() {
                 .with_header(Header::from_bytes(header::CONNECTION, "Upgrade").unwrap())
                 .with_header(Header::from_bytes(header::SEC_WEBSOCKET_PROTOCOL, "ping").unwrap())
                 .with_header(
-                    Header::from_bytes(header::SEC_WEBSOCKET_ACCEPT, convert_key(key.as_str()))
-                        .unwrap(),
+                    Header::from_bytes(header::SEC_WEBSOCKET_ACCEPT, convert_key(key)).unwrap(),
                 );
 
             //
