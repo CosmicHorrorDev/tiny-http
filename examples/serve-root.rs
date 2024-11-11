@@ -2,8 +2,7 @@ use ascii::AsciiString;
 use std::fs;
 use std::path::Path;
 
-extern crate ascii;
-extern crate tiny_http;
+use tiny_http::http;
 
 fn get_content_type(path: &Path) -> &'static str {
     let extension = match path.extension() {
@@ -51,7 +50,7 @@ fn main() {
 
             let _ = rq.respond(response);
         } else {
-            let rep = tiny_http::Response::new_empty(tiny_http::StatusCode(404));
+            let rep = tiny_http::Response::new_empty(http::StatusCode::NOT_FOUND);
             let _ = rq.respond(rep);
         }
     }
