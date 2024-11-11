@@ -21,8 +21,8 @@ impl Header {
     #[allow(clippy::result_unit_err)]
     pub fn from_bytes<B1, B2>(header: B1, value: B2) -> Result<Header, ()>
     where
-        B1: Into<Vec<u8>> + AsRef<[u8]>,
-        B2: Into<Vec<u8>> + AsRef<[u8]>,
+        B1: AsRef<[u8]>,
+        B2: AsRef<[u8]>,
     {
         let header = HeaderName::from_bytes(header.as_ref()).or(Err(()))?;
         let value = HeaderValue::from_bytes(value.as_ref()).or(Err(()))?;

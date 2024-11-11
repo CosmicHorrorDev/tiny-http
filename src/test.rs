@@ -1,5 +1,5 @@
 use crate::{request::new_request, HTTPVersion, Header, Request};
-use http::{HeaderName, HeaderValue, Method};
+use http::{header, HeaderValue, Method};
 use std::net::SocketAddr;
 
 /// A simpler version of [`Request`] that is useful for testing. No data actually goes anywhere.
@@ -58,10 +58,10 @@ impl From<TestRequest> for Request {
         if !mock
             .headers
             .iter_mut()
-            .any(|h| h.field == "Content-Length")
+            .any(|h| h.field == header::CONTENT_LENGTH)
         {
             mock.headers.push(Header {
-                field: HeaderName::from_static("content-length"),
+                field: header::CONTENT_LENGTH,
                 value: HeaderValue::from_str(&mock.body.len().to_string()).unwrap(),
             });
         }

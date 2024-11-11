@@ -1,5 +1,5 @@
 use crate::common::{HTTPVersion, Header};
-use http::StatusCode;
+use http::{header, StatusCode};
 use httpdate::HttpDate;
 use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
@@ -74,7 +74,7 @@ impl FromStr for TransferEncoding {
 /// Builds a Date: header with the current date.
 fn build_date_header() -> Header {
     let d = HttpDate::from(SystemTime::now());
-    Header::from_bytes(&b"Date"[..], &d.to_string().into_bytes()[..]).unwrap()
+    Header::from_bytes(b"Date", d.to_string().into_bytes()).unwrap()
 }
 
 fn write_message_header<W>(
@@ -135,7 +135,7 @@ fn choose_transfer_encoding(
     let user_request = request_headers
         .iter()
         // finding TE
-        .find(|h| h.field == "TE")
+        .find(|h| h.field == header::TE)
         // getting its value
         .and_then(|h| h.value.to_str().ok()) // TODO: remove conversion
         // getting the corresponding TransferEncoding
@@ -255,27 +255,24 @@ where
         let header = header.into();
 
         // ignoring forbidden headers
-        if header.field == "Connection"
-            || header.field == "Trailer"
-            || header.field == "Transfer-Encoding"
-            || header.field == "Upgrade"
+        if [header::CONNECTION, header::TRAILER, header::TRANSFER_ENCODING, header::UPGRADE].contains(&header.field)
         {
             return;
         }
 
         // if the header is Content-Length, setting the data length
-        if header.field == "Content-Length" {
+        if header.field == header::CONTENT_LENGTH {
             if let Some(val) = header.value.to_str().ok().and_then(|v| usize::from_str(v).ok()) {
                 self.data_length = Some(val)
             }
 
             return;
         // if the header is Content-Type and it's already set, overwrite it
-        } else if header.field == "Content-Type" {
+        } else if header.field == header::CONTENT_TYPE {
             if let Some(content_type_header) = self
                 .headers
                 .iter_mut()
-                .find(|h| h.field == "Content-Type")
+                .find(|h| h.field == header::CONTENT_TYPE)
             {
                 content_type_header.value = header.value;
                 return;
@@ -349,15 +346,15 @@ where
         ));
 
         // add `Date` if not in the headers
-        if !self.headers.iter().any(|h| h.field == "Date") {
+        if !self.headers.iter().any(|h| h.field == header::DATE) {
             self.headers.insert(0, build_date_header());
         }
 
         // add `Server` if not in the headers
-        if !self.headers.iter().any(|h| h.field == "Server") {
+        if !self.headers.iter().any(|h| h.field == header::SERVER) {
             self.headers.insert(
                 0,
-                Header::from_bytes(&b"Server"[..], &b"tiny-http (Rust)"[..]).unwrap(),
+                Header::from_bytes(header::SERVER, b"tiny-http (Rust)").unwrap(),
             );
         }
 
@@ -365,11 +362,11 @@ where
         if let Some(upgrade) = upgrade {
             self.headers.insert(
                 0,
-                Header::from_bytes(&b"Upgrade"[..], upgrade.as_bytes()).unwrap(),
+                Header::from_bytes(header::UPGRADE, upgrade.as_bytes()).unwrap(),
             );
             self.headers.insert(
                 0,
-                Header::from_bytes(&b"Connection"[..], &b"upgrade"[..]).unwrap(),
+                Header::from_bytes(header::CONNECTION, b"upgrade").unwrap(),
             );
             transfer_encoding = None;
         }
@@ -401,16 +398,17 @@ where
         match transfer_encoding {
             Some(TransferEncoding::Chunked) => self
                 .headers
-                .push(Header::from_bytes(&b"Transfer-Encoding"[..], &b"chunked"[..]).unwrap()),
+                .push(Header::from_bytes(header::TRANSFER_ENCODING, b"chunked").unwrap()),
 
             Some(TransferEncoding::Identity) => {
+                // XXX: what's the point of asserting here?
                 assert!(data_length.is_some());
                 let data_length = data_length.unwrap();
 
                 self.headers.push(
                     Header::from_bytes(
-                        &b"Content-Length"[..],
-                        format!("{}", data_length).as_bytes(),
+                        header::CONTENT_LENGTH,
+                        data_length.to_string(),
                     )
                     .unwrap(),
                 )
@@ -438,6 +436,7 @@ where
                 }
 
                 Some(TransferEncoding::Identity) => {
+                    // XXX: asserting before an unwrap?
                     assert!(data_length.is_some());
                     let data_length = data_length.unwrap();
 
@@ -530,7 +529,7 @@ impl Response<Cursor<Vec<u8>>> {
         Response::new(
             StatusCode::OK,
             vec![
-                Header::from_bytes(&b"Content-Type"[..], &b"text/plain; charset=UTF-8"[..])
+                Header::from_bytes(header::CONTENT_TYPE, b"text/plain; charset=UTF-8")
                     .unwrap(),
             ],
             Cursor::new(data.into_bytes()),
@@ -555,6 +554,7 @@ impl Response<io::Empty> {
         )
     }
 
+    // TODO: actually deprecate this
     /// DEPRECATED. Use `empty` instead.
     pub fn new_empty(status_code: StatusCode) -> Response<io::Empty> {
         Response::empty(status_code)

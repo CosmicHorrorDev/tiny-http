@@ -10,7 +10,7 @@ use std::sync::mpsc::Sender;
 use crate::util::{EqualReader, FusedReader};
 use crate::{HTTPVersion, Header, Response};
 use chunked_transfer::Decoder;
-use http::{Method, StatusCode};
+use http::{header, Method, StatusCode};
 
 /// Represents an HTTP request made by a client.
 ///
@@ -144,7 +144,7 @@ where
     // finding the transfer-encoding header
     let transfer_encoding = headers
         .iter()
-        .find(|h: &&Header| h.field == "Transfer-Encoding")
+        .find(|h: &&Header| h.field == header::TRANSFER_ENCODING)
         .map(|h| h.value.clone());
 
     // finding the content-length header
@@ -155,7 +155,7 @@ where
     } else {
         headers
             .iter()
-            .find(|h: &&Header| h.field == "Content-Length")
+            .find(|h: &&Header| h.field == header::CONTENT_LENGTH)
             .and_then(|h| h.value.to_str().ok().and_then(|v| FromStr::from_str(v).ok()))
     };
 
@@ -163,7 +163,7 @@ where
     let expects_continue = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field == "Expect")
+            .find(|h: &&Header| h.field == header::EXPECT)
             .and_then(|h| h.value.to_str().ok())
         {
             None => false,
@@ -176,7 +176,7 @@ where
     let connection_upgrade = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field == "Connection")
+            .find(|h: &&Header| h.field == header::CONNECTION)
             .and_then(|h| h.value.to_str().ok())
         {
             Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,
@@ -186,12 +186,12 @@ where
 
     // we wrap `source_data` around a reading whose nature depends on the transfer-encoding and
     // content-length headers
-    let reader = if connection_upgrade {
+    let reader: Box<dyn Read + Send + 'static> = if connection_upgrade {
         // if we have a `Connection: upgrade`, always keeping the whole reader
-        Box::new(source_data) as Box<dyn Read + Send + 'static>
+        Box::new(source_data)
     } else if let Some(content_length) = content_length {
         if content_length == 0 {
-            Box::new(io::empty()) as Box<dyn Read + Send + 'static>
+            Box::new(io::empty())
         } else if content_length <= 1024 && !expects_continue {
             // if the content-length is small enough, we just read everything into a buffer
 
@@ -211,25 +211,25 @@ where
                 offset += read;
             }
 
-            Box::new(Cursor::new(buffer)) as Box<dyn Read + Send + 'static>
+            Box::new(Cursor::new(buffer))
         } else {
             let (data_reader, _) = EqualReader::new(source_data, content_length); // TODO:
-            Box::new(FusedReader::new(data_reader)) as Box<dyn Read + Send + 'static>
+            Box::new(FusedReader::new(data_reader))
         }
     } else if transfer_encoding.is_some() {
         // if a transfer-encoding was specified, then "chunked" is ALWAYS applied
         // over the message (RFC2616 #3.6)
-        Box::new(FusedReader::new(Decoder::new(source_data))) as Box<dyn Read + Send + 'static>
+        Box::new(FusedReader::new(Decoder::new(source_data)))
     } else {
         // if we have neither a Content-Length nor a Transfer-Encoding,
         // assuming that we have no data
         // TODO: could also be multipart/byteranges
-        Box::new(io::empty()) as Box<dyn Read + Send + 'static>
+        Box::new(io::empty())
     };
 
     Ok(Request {
         data_reader: Some(reader),
-        response_writer: Some(Box::new(writer) as Box<dyn Write + Send + 'static>),
+        response_writer: Some(Box::new(writer)),
         remote_addr,
         secure,
         method,
@@ -328,9 +328,9 @@ impl Request {
                 sender,
                 inner: stream,
             };
-            Box::new(stream) as Box<dyn ReadWrite + Send>
+            Box::new(stream)
         } else {
-            Box::new(stream) as Box<dyn ReadWrite + Send>
+            Box::new(stream)
         }
     }
 
@@ -510,10 +510,7 @@ mod tests {
 
     #[test]
     fn must_be_send() {
-        #![allow(dead_code)]
-        fn f<T: Send>(_: &T) {}
-        fn bar(rq: &Request) {
-            f(rq);
-        }
+        fn compile_if_send<T: Send>() {}
+        compile_if_send::<Request>();
     }
 }
