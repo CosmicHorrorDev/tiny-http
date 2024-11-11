@@ -1,4 +1,4 @@
-use crate::{request::new_request, HTTPVersion, Header, Request};
+use crate::{request::new_request, HttpVersion, Header, Request};
 use http::{header, HeaderValue, Method};
 use std::net::SocketAddr;
 
@@ -47,7 +47,7 @@ pub struct TestRequest {
     secure: bool,
     method: Method,
     path: String,
-    http_version: HTTPVersion,
+    http_version: HttpVersion,
     headers: Vec<Header>,
 }
 
@@ -87,7 +87,7 @@ impl Default for TestRequest {
             secure: false,
             method: Method::GET,
             path: "/".to_string(),
-            http_version: HTTPVersion::from((1, 1)),
+            http_version: HttpVersion::from((1, 1)),
             headers: Vec::new(),
         }
     }
@@ -117,7 +117,7 @@ impl TestRequest {
         self.path = path.to_string();
         self
     }
-    pub fn with_http_version(mut self, version: HTTPVersion) -> Self {
+    pub fn with_http_version(mut self, version: HttpVersion) -> Self {
         self.http_version = version;
         self
     }

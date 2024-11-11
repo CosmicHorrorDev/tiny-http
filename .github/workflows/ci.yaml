@@ -1,3 +1,5 @@
+# TODO: run CI on non unix OS too, so that we continuously test that too?
+
 on: [push, pull_request]
 name: CI
 jobs:

@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::sync::mpsc::Sender;
 
 use crate::util::{EqualReader, FusedReader};
-use crate::{HTTPVersion, Header, Response};
+use crate::{Header, HttpVersion, Response};
 use chunked_transfer::Decoder;
 use http::{header, Method, StatusCode};
 
@@ -64,7 +64,7 @@ pub struct Request {
 
     path: String,
 
-    http_version: HTTPVersion,
+    http_version: HttpVersion,
 
     headers: Vec<Header>,
 
@@ -97,10 +97,11 @@ impl<R: Write> Write for NotifyOnDrop<R> {
 }
 impl<R> Drop for NotifyOnDrop<R> {
     fn drop(&mut self) {
-        self.sender.send(()).unwrap();
+        let _ = self.sender.send(());
     }
 }
 
+// TODO: impl display and error
 /// Error that can happen when building a `Request` object.
 #[derive(Debug)]
 pub enum RequestCreationError {
@@ -131,7 +132,7 @@ pub fn new_request<R, W>(
     secure: bool,
     method: Method,
     path: String,
-    version: HTTPVersion,
+    version: HttpVersion,
     headers: Vec<Header>,
     remote_addr: Option<SocketAddr>,
     mut source_data: R,
@@ -142,13 +143,10 @@ where
     W: Write + Send + 'static,
 {
     // finding the transfer-encoding header
-    let transfer_encoding = headers
-        .iter()
-        .find(|h: &&Header| h.field == header::TRANSFER_ENCODING)
-        .map(|h| h.value.clone());
+    let has_transfer_encoding = headers.iter().any(|h| h.field == header::TRANSFER_ENCODING);
 
     // finding the content-length header
-    let content_length = if transfer_encoding.is_some() {
+    let content_length = if has_transfer_encoding {
         // if transfer-encoding is specified, the Content-Length
         // header must be ignored (RFC2616 #4.4)
         None
@@ -156,33 +154,32 @@ where
         headers
             .iter()
             .find(|h: &&Header| h.field == header::CONTENT_LENGTH)
-            .and_then(|h| h.value.to_str().ok().and_then(|v| FromStr::from_str(v).ok()))
+            .and_then(|h| {
+                h.value
+                    .to_str()
+                    .ok()
+                    .and_then(|v| FromStr::from_str(v).ok())
+            })
     };
 
     // true if the client sent a `Expect: 100-continue` header
-    let expects_continue = {
-        match headers
-            .iter()
-            .find(|h: &&Header| h.field == header::EXPECT)
-            .and_then(|h| h.value.to_str().ok())
-        {
-            None => false,
-            Some(v) if v.eq_ignore_ascii_case("100-continue") => true,
-            _ => return Err(RequestCreationError::ExpectationFailed),
-        }
+    let expects_continue = match headers
+        .iter()
+        .find(|h: &&Header| h.field == header::EXPECT)
+        .and_then(|h| h.value.to_str().ok())
+    {
+        None => false,
+        Some(v) if v.eq_ignore_ascii_case("100-continue") => true,
+        _ => return Err(RequestCreationError::ExpectationFailed),
     };
 
     // true if the client sent a `Connection: upgrade` header
-    let connection_upgrade = {
-        match headers
-            .iter()
-            .find(|h: &&Header| h.field == header::CONNECTION)
-            .and_then(|h| h.value.to_str().ok())
-        {
-            Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,
-            _ => false,
-        }
-    };
+    let connection_upgrade = headers
+        .iter()
+        .find(|h: &&Header| h.field == header::CONNECTION)
+        .and_then(|h| h.value.to_str().ok())
+        .map(|v| v.to_ascii_lowercase().contains("upgrade"))
+        .unwrap_or(false);
 
     // we wrap `source_data` around a reading whose nature depends on the transfer-encoding and
     // content-length headers
@@ -216,7 +213,7 @@ where
             let (data_reader, _) = EqualReader::new(source_data, content_length); // TODO:
             Box::new(FusedReader::new(data_reader))
         }
-    } else if transfer_encoding.is_some() {
+    } else if has_transfer_encoding {
         // if a transfer-encoding was specified, then "chunked" is ALWAYS applied
         // over the message (RFC2616 #3.6)
         Box::new(FusedReader::new(Decoder::new(source_data)))
@@ -269,7 +266,7 @@ impl Request {
 
     /// Returns the HTTP version of the request.
     #[inline]
-    pub fn http_version(&self) -> &HTTPVersion {
+    pub fn http_version(&self) -> &HttpVersion {
         &self.http_version
     }
 
@@ -339,12 +336,9 @@ impl Request {
     /// # Example
     ///
     /// ```no_run
-    /// # extern crate rustc_serialize;
-    /// # extern crate tiny_http;
     /// # use rustc_serialize::json::Json;
     /// # use std::io::Read;
     /// # fn get_content_type(_: &tiny_http::Request) -> &'static str { "" }
-    /// # fn main() {
     /// # let server = tiny_http::Server::http("0.0.0.0:0").unwrap();
     /// let mut request = server.recv().unwrap();
     ///
@@ -353,7 +347,6 @@ impl Request {
     ///     request.as_reader().read_to_string(&mut content).unwrap();
     ///     let json: Json = content.parse().unwrap();
     /// }
-    /// # }
     /// ```
     ///
     /// If the client sent a `Expect: 100-continue` header with the request, calling this
@@ -406,26 +399,14 @@ impl Request {
     ///
     /// This may only be called once on a single request.
     fn extract_writer_impl(&mut self) -> Box<dyn Write + Send + 'static> {
-        use std::mem;
-
-        assert!(self.response_writer.is_some());
-
-        let mut writer = None;
-        mem::swap(&mut self.response_writer, &mut writer);
-        writer.unwrap()
+        self.response_writer.take().unwrap()
     }
 
     /// Extract the body `Reader` object from the Request.
     ///
     /// This may only be called once on a single request.
     fn extract_reader_impl(&mut self) -> Box<dyn Read + Send + 'static> {
-        use std::mem;
-
-        assert!(self.data_reader.is_some());
-
-        let mut reader = None;
-        mem::swap(&mut self.data_reader, &mut reader);
-        reader.unwrap()
+        self.data_reader.take().unwrap()
     }
 
     /// Sends a response to this request.
@@ -462,10 +443,10 @@ impl Request {
 
     fn ignore_client_closing_errors(result: io::Result<()>) -> io::Result<()> {
         result.or_else(|err| match err.kind() {
-            ErrorKind::BrokenPipe => Ok(()),
-            ErrorKind::ConnectionAborted => Ok(()),
-            ErrorKind::ConnectionRefused => Ok(()),
-            ErrorKind::ConnectionReset => Ok(()),
+            ErrorKind::BrokenPipe
+            | ErrorKind::ConnectionAborted
+            | ErrorKind::ConnectionRefused
+            | ErrorKind::ConnectionReset => Ok(()),
             _ => Err(err),
         })
     }
@@ -477,7 +458,7 @@ impl Request {
 }
 
 impl fmt::Debug for Request {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
             "Request({} {} from {:?})",
@@ -492,7 +473,7 @@ impl Drop for Request {
             let response = Response::empty(StatusCode::INTERNAL_SERVER_ERROR);
             let _ = self.respond_impl(response); // ignoring any potential error
             if let Some(sender) = self.notify_when_responded.take() {
-                sender.send(()).unwrap();
+                let _ = sender.send(());
             }
         }
     }

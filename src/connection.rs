@@ -117,14 +117,14 @@ impl From<unix_net::UnixStream> for Connection {
 
 #[derive(Debug, Clone)]
 pub enum ConfigListenAddr {
-    IP(Vec<SocketAddr>),
+    Ip(Vec<SocketAddr>),
     #[cfg(unix)]
     // TODO: use SocketAddr when bind_addr is stabilized
     Unix(std::path::PathBuf),
 }
 impl ConfigListenAddr {
     pub fn from_socket_addrs<A: ToSocketAddrs>(addrs: A) -> std::io::Result<Self> {
-        addrs.to_socket_addrs().map(|it| Self::IP(it.collect()))
+        addrs.to_socket_addrs().map(|it| Self::Ip(it.collect()))
     }
 
     #[cfg(unix)]
@@ -134,7 +134,7 @@ impl ConfigListenAddr {
 
     pub(crate) fn bind(&self) -> std::io::Result<Listener> {
         match self {
-            Self::IP(a) => TcpListener::bind(a.as_slice()).map(Listener::from),
+            Self::Ip(a) => TcpListener::bind(a.as_slice()).map(Listener::from),
             #[cfg(unix)]
             Self::Unix(a) => unix_net::UnixListener::bind(a).map(Listener::from),
         }

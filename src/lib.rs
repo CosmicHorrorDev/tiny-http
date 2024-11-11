@@ -114,7 +114,7 @@ use client::ClientConnection;
 use connection::Connection;
 use util::MessagesQueue;
 
-pub use common::{HTTPVersion, Header};
+pub use common::{Header, HttpVersion};
 pub use connection::{ConfigListenAddr, ListenAddr, Listener};
 pub use request::{ReadWrite, Request};
 pub use response::{Response, ResponseBox};
@@ -166,12 +166,14 @@ impl From<Request> for Message {
     }
 }
 
+// TODO: Move this to a similar test as the other trait checking
 // this trait is to make sure that Server implements Share and Send
 #[doc(hidden)]
 trait MustBeShareDummy: Sync + Send {}
 #[doc(hidden)]
 impl MustBeShareDummy for Server {}
 
+// TODO: doc this pointing back to the method docs
 pub struct IncomingRequests<'a> {
     server: &'a Server,
 }
@@ -453,6 +455,7 @@ impl Server {
 impl Iterator for IncomingRequests<'_> {
     type Item = Request;
     fn next(&mut self) -> Option<Request> {
+        // TODO: Do we really want to return `None` for errors here?
         self.server.recv().ok()
     }
 }

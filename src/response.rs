@@ -1,4 +1,4 @@
-use crate::common::{HTTPVersion, Header};
+use crate::common::{Header, HttpVersion};
 use http::{header, StatusCode};
 use httpdate::HttpDate;
 use std::cmp::Ordering;
@@ -74,12 +74,12 @@ impl FromStr for TransferEncoding {
 /// Builds a Date: header with the current date.
 fn build_date_header() -> Header {
     let d = HttpDate::from(SystemTime::now());
-    Header::from_bytes(b"Date", d.to_string().into_bytes()).unwrap()
+    Header::from_bytes(header::DATE, d.to_string()).unwrap()
 }
 
 fn write_message_header<W>(
     mut writer: W,
-    http_version: &HTTPVersion,
+    http_version: &HttpVersion,
     status_code: &StatusCode,
     headers: &[Header],
 ) -> IoResult<()>
@@ -87,13 +87,7 @@ where
     W: Write,
 {
     // writing status line
-    write!(
-        &mut writer,
-        "HTTP/{}.{} {}\r\n",
-        http_version.0,
-        http_version.1,
-        status_code,
-    )?;
+    write!(&mut writer, "HTTP/{} {}\r\n", http_version, status_code)?;
 
     // writing headers
     for header in headers.iter() {
@@ -112,7 +106,7 @@ where
 fn choose_transfer_encoding(
     status_code: StatusCode,
     request_headers: &[Header],
-    http_version: &HTTPVersion,
+    http_version: &HttpVersion,
     entity_length: &Option<usize>,
     has_additional_headers: bool,
     chunked_threshold: usize,
@@ -255,14 +249,25 @@ where
         let header = header.into();
 
         // ignoring forbidden headers
-        if [header::CONNECTION, header::TRAILER, header::TRANSFER_ENCODING, header::UPGRADE].contains(&header.field)
+        if [
+            header::CONNECTION,
+            header::TRAILER,
+            header::TRANSFER_ENCODING,
+            header::UPGRADE,
+        ]
+        .contains(&header.field)
         {
             return;
         }
 
         // if the header is Content-Length, setting the data length
         if header.field == header::CONTENT_LENGTH {
-            if let Some(val) = header.value.to_str().ok().and_then(|v| usize::from_str(v).ok()) {
+            if let Some(val) = header
+                .value
+                .to_str()
+                .ok()
+                .and_then(|v| usize::from_str(v).ok())
+            {
                 self.data_length = Some(val)
             }
 
@@ -331,7 +336,7 @@ where
     pub fn raw_print<W: Write>(
         mut self,
         mut writer: W,
-        http_version: HTTPVersion,
+        http_version: HttpVersion,
         request_headers: &[Header],
         do_not_send_body: bool,
         upgrade: Option<&str>,
@@ -406,11 +411,7 @@ where
                 let data_length = data_length.unwrap();
 
                 self.headers.push(
-                    Header::from_bytes(
-                        header::CONTENT_LENGTH,
-                        data_length.to_string(),
-                    )
-                    .unwrap(),
+                    Header::from_bytes(header::CONTENT_LENGTH, data_length.to_string()).unwrap(),
                 )
             }
 
@@ -492,13 +493,7 @@ impl Response<File> {
     pub fn from_file(file: File) -> Response<File> {
         let file_size = file.metadata().ok().map(|v| v.len() as usize);
 
-        Response::new(
-            StatusCode::OK,
-            Vec::with_capacity(0),
-            file,
-            file_size,
-            None,
-        )
+        Response::new(StatusCode::OK, Vec::with_capacity(0), file, file_size, None)
     }
 }
 
@@ -528,10 +523,7 @@ impl Response<Cursor<Vec<u8>>> {
 
         Response::new(
             StatusCode::OK,
-            vec![
-                Header::from_bytes(header::CONTENT_TYPE, b"text/plain; charset=UTF-8")
-                    .unwrap(),
-            ],
+            vec![Header::from_bytes(header::CONTENT_TYPE, b"text/plain; charset=UTF-8").unwrap()],
             Cursor::new(data.into_bytes()),
             Some(data_len),
             None,
