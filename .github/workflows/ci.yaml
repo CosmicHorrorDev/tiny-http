@@ -40,8 +40,8 @@ jobs:
       matrix:
         rust:
           - stable
-          - nightly
-          - 1.57
+          - beta
+          - 1.60.0
         features:
           - default
           - ssl-openssl
