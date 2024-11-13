@@ -74,7 +74,7 @@ fn main() {
             match request
                 .headers()
                 .iter()
-                .find(|h| h.field== "Upgrade")
+                .find(|h| h.field == "Upgrade")
                 .and_then(|hdr| {
                     if hdr.value == "websocket" {
                         Some(hdr)

@@ -1,4 +1,4 @@
-use crate::{request::new_request, HttpVersion, Header, Request};
+use crate::{request::new_request, Header, HttpVersion, Request};
 use http::{header, HeaderValue, Method};
 use std::net::SocketAddr;
 
