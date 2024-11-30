@@ -1,4 +1,4 @@
-use ascii::AsciiString;
+use http::HeaderValue;
 use std::fs;
 use std::path::Path;
 
@@ -45,13 +45,13 @@ fn main() {
             let response = tiny_http::Response::from_file(file.unwrap());
 
             let response = response.with_header(tiny_http::Header {
-                field: "Content-Type".parse().unwrap(),
-                value: AsciiString::from_ascii(get_content_type(&path)).unwrap(),
+                field: http::header::CONTENT_TYPE,
+                value: HeaderValue::from_str(get_content_type(&path)).unwrap(),
             });
 
             let _ = rq.respond(response);
         } else {
-            let rep = tiny_http::Response::new_empty(tiny_http::StatusCode(404));
+            let rep = tiny_http::Response::new_empty(http::StatusCode::NOT_FOUND);
             let _ = rq.respond(rep);
         }
     }

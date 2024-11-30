@@ -1,4 +1,6 @@
 use ascii::AsciiString;
+use http::header;
+use http::Method;
 
 use std::io::Error as IoError;
 use std::io::Result as IoResult;
@@ -7,7 +9,7 @@ use std::io::{BufReader, BufWriter, ErrorKind, Read};
 use std::net::SocketAddr;
 use std::str::FromStr;
 
-use crate::common::{HTTPVersion, Method};
+use crate::common::HTTPVersion;
 use crate::util::RefinedTcpStream;
 use crate::util::{SequentialReader, SequentialReaderBuilder, SequentialWriterBuilder};
 use crate::Request;
@@ -175,7 +177,9 @@ impl Iterator for ClientConnection {
     /// Blocks until the next Request is available.
     /// Returns None when no new Requests will come from the client.
     fn next(&mut self) -> Option<Request> {
-        use crate::{Response, StatusCode};
+        use crate::Response;
+
+        use http::StatusCode;
 
         // the client sent a "connection: close" header in this previous request
         //  or is using HTTP 1.0, meaning that no new request will come
@@ -187,7 +191,7 @@ impl Iterator for ClientConnection {
             let rq = match self.read() {
                 Err(ReadError::WrongRequestLine) => {
                     let writer = self.sink.next().unwrap();
-                    let response = Response::new_empty(StatusCode(400));
+                    let response = Response::new_empty(StatusCode::BAD_REQUEST);
                     response
                         .raw_print(writer, HTTPVersion(1, 1), &[], false, None)
                         .ok();
@@ -197,7 +201,7 @@ impl Iterator for ClientConnection {
 
                 Err(ReadError::WrongHeader(ver)) => {
                     let writer = self.sink.next().unwrap();
-                    let response = Response::new_empty(StatusCode(400));
+                    let response = Response::new_empty(StatusCode::BAD_REQUEST);
                     response.raw_print(writer, ver, &[], false, None).ok();
                     return None; // we don't know where the next request would start,
                                  // se we have to close
@@ -206,7 +210,7 @@ impl Iterator for ClientConnection {
                 Err(ReadError::ReadIoError(ref err)) if err.kind() == ErrorKind::TimedOut => {
                     // request timeout
                     let writer = self.sink.next().unwrap();
-                    let response = Response::new_empty(StatusCode(408));
+                    let response = Response::new_empty(StatusCode::REQUEST_TIMEOUT);
                     response
                         .raw_print(writer, HTTPVersion(1, 1), &[], false, None)
                         .ok();
@@ -215,7 +219,7 @@ impl Iterator for ClientConnection {
 
                 Err(ReadError::ExpectationFailed(ver)) => {
                     let writer = self.sink.next().unwrap();
-                    let response = Response::new_empty(StatusCode(417));
+                    let response = Response::new_empty(StatusCode::EXPECTATION_FAILED);
                     response.raw_print(writer, ver, &[], true, None).ok();
                     return None; // TODO: should be recoverable, but needs handling in case of body
                 }
@@ -231,7 +235,7 @@ impl Iterator for ClientConnection {
                 let response = Response::from_string(
                     "This server only supports HTTP versions 1.0 and 1.1".to_owned(),
                 )
-                .with_status_code(StatusCode(505));
+                .with_status_code(StatusCode::HTTP_VERSION_NOT_SUPPORTED);
                 response
                     .raw_print(writer, HTTPVersion(1, 1), &[], false, None)
                     .ok();
@@ -242,8 +246,8 @@ impl Iterator for ClientConnection {
             let connection_header = rq
                 .headers()
                 .iter()
-                .find(|h| h.field.equiv("Connection"))
-                .map(|h| h.value.as_str());
+                .find(|h| h.field == header::CONNECTION)
+                .and_then(|h| h.value.to_str().ok());
 
             let lowercase = connection_header.map(|h| h.to_ascii_lowercase());
 
@@ -299,7 +303,7 @@ mod test {
     fn test_parse_request_line() {
         let (method, path, ver) = super::parse_request_line("GET /hello HTTP/1.1").unwrap();
 
-        assert!(method == crate::Method::Get);
+        assert!(method == http::Method::GET);
         assert!(path == "/hello");
         assert!(ver == crate::common::HTTPVersion(1, 1));
 

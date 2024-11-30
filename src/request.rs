@@ -3,13 +3,13 @@ use std::io::{self, Cursor, ErrorKind, Read, Write};
 
 use std::fmt;
 use std::net::SocketAddr;
-use std::str::FromStr;
 
 use std::sync::mpsc::Sender;
 
 use crate::util::{EqualReader, FusedReader};
-use crate::{HTTPVersion, Header, Method, Response, StatusCode};
+use crate::{HTTPVersion, Header, Response};
 use chunked_transfer::Decoder;
+use http::{header, Method, StatusCode};
 
 /// Represents an HTTP request made by a client.
 ///
@@ -143,7 +143,7 @@ where
     // finding the transfer-encoding header
     let transfer_encoding = headers
         .iter()
-        .find(|h: &&Header| h.field.equiv("Transfer-Encoding"))
+        .find(|h| h.field == header::TRANSFER_ENCODING)
         .map(|h| h.value.clone());
 
     // finding the content-length header
@@ -154,16 +154,19 @@ where
     } else {
         headers
             .iter()
-            .find(|h: &&Header| h.field.equiv("Content-Length"))
-            .and_then(|h| FromStr::from_str(h.value.as_str()).ok())
+            .find(|h: &&Header| h.field == header::CONTENT_LENGTH)
+            .and_then(|h| {
+                let value = h.value.to_str().ok()?;
+                value.parse().ok()
+            })
     };
 
     // true if the client sent a `Expect: 100-continue` header
     let expects_continue = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field.equiv("Expect"))
-            .map(|h| h.value.as_str())
+            .find(|h: &&Header| h.field == header::EXPECT)
+            .and_then(|h| h.value.to_str().ok())
         {
             None => false,
             Some(v) if v.eq_ignore_ascii_case("100-continue") => true,
@@ -175,8 +178,8 @@ where
     let connection_upgrade = {
         match headers
             .iter()
-            .find(|h: &&Header| h.field.equiv("Connection"))
-            .map(|h| h.value.as_str())
+            .find(|h: &&Header| h.field == header::CONNECTION)
+            .and_then(|h| h.value.to_str().ok())
         {
             Some(v) if v.to_ascii_lowercase().contains("upgrade") => true,
             _ => false,
@@ -360,7 +363,7 @@ impl Request {
     #[inline]
     pub fn as_reader(&mut self) -> &mut dyn Read {
         if self.must_send_continue {
-            let msg = Response::new_empty(StatusCode(100));
+            let msg = Response::new_empty(StatusCode::CONTINUE);
             msg.raw_print(
                 self.response_writer.as_mut().unwrap().by_ref(),
                 self.http_version.clone(),
@@ -446,7 +449,7 @@ impl Request {
     {
         let mut writer = self.extract_writer_impl();
 
-        let do_not_send_body = self.method == Method::Head;
+        let do_not_send_body = self.method == Method::HEAD;
 
         Self::ignore_client_closing_errors(response.raw_print(
             writer.by_ref(),
@@ -488,7 +491,7 @@ impl fmt::Debug for Request {
 impl Drop for Request {
     fn drop(&mut self) {
         if self.response_writer.is_some() {
-            let response = Response::empty(500);
+            let response = Response::empty(StatusCode::INTERNAL_SERVER_ERROR);
             let _ = self.respond_impl(response); // ignoring any potential error
             if let Some(sender) = self.notify_when_responded.take() {
                 sender.send(()).unwrap();

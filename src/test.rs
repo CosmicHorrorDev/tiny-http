@@ -1,7 +1,6 @@
-use crate::{request::new_request, HTTPVersion, Header, HeaderField, Method, Request};
-use ascii::AsciiString;
+use crate::{request::new_request, HTTPVersion, Header, Request};
+use http::{header, HeaderValue, Method};
 use std::net::SocketAddr;
-use std::str::FromStr;
 
 /// A simpler version of [`Request`] that is useful for testing. No data actually goes anywhere.
 ///
@@ -9,9 +8,10 @@ use std::str::FromStr;
 /// with no headers. To create a `TestRequest` with different parameters, use the builder pattern:
 ///
 /// ```
-/// # use tiny_http::{Method, TestRequest};
+/// # use http::Method;
+/// # use tiny_http::TestRequest;
 /// let request = TestRequest::new()
-///     .with_method(Method::Post)
+///     .with_method(Method::POST)
 ///     .with_path("/api/widgets")
 ///     .with_body("42");
 /// ```
@@ -19,10 +19,11 @@ use std::str::FromStr;
 /// Then, convert the `TestRequest` into a real `Request` and pass it to the server under test:
 ///
 /// ```
-/// # use tiny_http::{Method, Request, Response, Server, StatusCode, TestRequest};
+/// # use http::Method;
+/// # use tiny_http::{Request, Response, Server, TestRequest};
 /// # use std::io::Cursor;
 /// # let request = TestRequest::new()
-/// #     .with_method(Method::Post)
+/// #     .with_method(Method::POST)
 /// #     .with_path("/api/widgets")
 /// #     .with_body("42");
 /// # struct TestServer {
@@ -37,7 +38,7 @@ use std::str::FromStr;
 /// #     }
 /// # }
 /// let response = server.handle_request(request.into());
-/// assert_eq!(response.status_code(), StatusCode(200));
+/// assert_eq!(response.status_code(), http::StatusCode::OK);
 /// ```
 pub struct TestRequest {
     body: &'static str,
@@ -57,11 +58,11 @@ impl From<TestRequest> for Request {
         if !mock
             .headers
             .iter_mut()
-            .any(|h| h.field.equiv("Content-Length"))
+            .any(|h| h.field == header::CONTENT_LENGTH)
         {
             mock.headers.push(Header {
-                field: HeaderField::from_str("Content-Length").unwrap(),
-                value: AsciiString::from_ascii(mock.body.len().to_string()).unwrap(),
+                field: header::CONTENT_LENGTH,
+                value: HeaderValue::from_str(&mock.body.len().to_string()).unwrap(),
             });
         }
         new_request(
@@ -84,7 +85,7 @@ impl Default for TestRequest {
             body: "",
             remote_addr: "127.0.0.1:23456".parse().unwrap(),
             secure: false,
-            method: Method::Get,
+            method: Method::GET,
             path: "/".to_string(),
             http_version: HTTPVersion::from((1, 1)),
             headers: Vec::new(),

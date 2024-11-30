@@ -1,4 +1,5 @@
-use crate::common::{HTTPVersion, Header, StatusCode};
+use crate::common::{HTTPVersion, Header};
+use http::{header, StatusCode};
 use httpdate::HttpDate;
 use std::cmp::Ordering;
 use std::sync::mpsc::Receiver;
@@ -73,7 +74,7 @@ impl FromStr for TransferEncoding {
 /// Builds a Date: header with the current date.
 fn build_date_header() -> Header {
     let d = HttpDate::from(SystemTime::now());
-    Header::from_bytes(&b"Date"[..], &d.to_string().into_bytes()[..]).unwrap()
+    Header::from_bytes(header::DATE, d.to_string()).unwrap()
 }
 
 fn write_message_header<W>(
@@ -88,18 +89,15 @@ where
     // writing status line
     write!(
         &mut writer,
-        "HTTP/{}.{} {} {}\r\n",
-        http_version.0,
-        http_version.1,
-        status_code.0,
-        status_code.default_reason_phrase()
+        "HTTP/{}.{} {}\r\n",
+        http_version.0, http_version.1, status_code,
     )?;
 
     // writing headers
     for header in headers.iter() {
         writer.write_all(header.field.as_str().as_ref())?;
         write!(&mut writer, ": ")?;
-        writer.write_all(header.value.as_str().as_ref())?;
+        writer.write_all(header.value.as_bytes())?;
         write!(&mut writer, "\r\n")?;
     }
 
@@ -127,7 +125,7 @@ fn choose_transfer_encoding(
     // Per section 3.3.1 of RFC7230:
     // A server MUST NOT send a Transfer-Encoding header field in any response with a status code
     // of 1xx (Informational) or 204 (No Content).
-    if status_code.0 < 200 || status_code.0 == 204 {
+    if status_code.is_informational() || status_code == StatusCode::NO_CONTENT {
         return TransferEncoding::Identity;
     }
 
@@ -135,13 +133,13 @@ fn choose_transfer_encoding(
     let user_request = request_headers
         .iter()
         // finding TE
-        .find(|h| h.field.equiv("TE"))
+        .find(|h| h.field == header::TE)
         // getting its value
-        .map(|h| h.value.clone())
+        .and_then(|h| h.value.to_str().ok())
         // getting the corresponding TransferEncoding
         .and_then(|value| {
             // getting list of requested elements
-            let mut parse = util::parse_header_value(value.as_str()); // TODO: remove conversion
+            let mut parse = util::parse_header_value(value); // TODO: remove conversion
 
             // sorting elements by most priority
             parse.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
@@ -255,27 +253,35 @@ where
         let header = header.into();
 
         // ignoring forbidden headers
-        if header.field.equiv("Connection")
-            || header.field.equiv("Trailer")
-            || header.field.equiv("Transfer-Encoding")
-            || header.field.equiv("Upgrade")
+        if [
+            header::CONNECTION,
+            header::TRAILER,
+            header::TRANSFER_ENCODING,
+            header::UPGRADE,
+        ]
+        .contains(&header.field)
         {
             return;
         }
 
         // if the header is Content-Length, setting the data length
-        if header.field.equiv("Content-Length") {
-            if let Ok(val) = usize::from_str(header.value.as_str()) {
+        if header.field == header::CONTENT_LENGTH {
+            if let Some(val) = header
+                .value
+                .to_str()
+                .ok()
+                .and_then(|v| usize::from_str(v).ok())
+            {
                 self.data_length = Some(val)
             }
 
             return;
         // if the header is Content-Type and it's already set, overwrite it
-        } else if header.field.equiv("Content-Type") {
+        } else if header.field == header::CONTENT_TYPE {
             if let Some(content_type_header) = self
                 .headers
                 .iter_mut()
-                .find(|h| h.field.equiv("Content-Type"))
+                .find(|h| h.field == header::CONTENT_TYPE)
             {
                 content_type_header.value = header.value;
                 return;
@@ -349,15 +355,15 @@ where
         ));
 
         // add `Date` if not in the headers
-        if !self.headers.iter().any(|h| h.field.equiv("Date")) {
+        if !self.headers.iter().any(|h| h.field == header::DATE) {
             self.headers.insert(0, build_date_header());
         }
 
         // add `Server` if not in the headers
-        if !self.headers.iter().any(|h| h.field.equiv("Server")) {
+        if !self.headers.iter().any(|h| h.field == header::SERVER) {
             self.headers.insert(
                 0,
-                Header::from_bytes(&b"Server"[..], &b"tiny-http (Rust)"[..]).unwrap(),
+                Header::from_bytes(header::SERVER, b"tiny-http (Rust)").unwrap(),
             );
         }
 
@@ -365,11 +371,11 @@ where
         if let Some(upgrade) = upgrade {
             self.headers.insert(
                 0,
-                Header::from_bytes(&b"Upgrade"[..], upgrade.as_bytes()).unwrap(),
+                Header::from_bytes(header::UPGRADE, upgrade.as_bytes()).unwrap(),
             );
             self.headers.insert(
                 0,
-                Header::from_bytes(&b"Connection"[..], &b"upgrade"[..]).unwrap(),
+                Header::from_bytes(header::CONNECTION, b"upgrade").unwrap(),
             );
             transfer_encoding = None;
         }
@@ -391,7 +397,7 @@ where
 
         // checking whether to ignore the body of the response
         let do_not_send_body = do_not_send_body
-            || match self.status_code.0 {
+            || match self.status_code.as_u16() {
                 // status code 1xx, 204 and 304 MUST not include a body
                 100..=199 | 204 | 304 => true,
                 _ => false,
@@ -401,18 +407,14 @@ where
         match transfer_encoding {
             Some(TransferEncoding::Chunked) => self
                 .headers
-                .push(Header::from_bytes(&b"Transfer-Encoding"[..], &b"chunked"[..]).unwrap()),
+                .push(Header::from_bytes(header::TRANSFER_ENCODING, b"chunked").unwrap()),
 
             Some(TransferEncoding::Identity) => {
                 assert!(data_length.is_some());
                 let data_length = data_length.unwrap();
 
                 self.headers.push(
-                    Header::from_bytes(
-                        &b"Content-Length"[..],
-                        format!("{}", data_length).as_bytes(),
-                    )
-                    .unwrap(),
+                    Header::from_bytes(header::CONTENT_LENGTH, data_length.to_string()).unwrap(),
                 )
             }
 
@@ -493,13 +495,7 @@ impl Response<File> {
     pub fn from_file(file: File) -> Response<File> {
         let file_size = file.metadata().ok().map(|v| v.len() as usize);
 
-        Response::new(
-            StatusCode(200),
-            Vec::with_capacity(0),
-            file,
-            file_size,
-            None,
-        )
+        Response::new(StatusCode::OK, Vec::with_capacity(0), file, file_size, None)
     }
 }
 
@@ -512,7 +508,7 @@ impl Response<Cursor<Vec<u8>>> {
         let data_len = data.len();
 
         Response::new(
-            StatusCode(200),
+            StatusCode::OK,
             Vec::with_capacity(0),
             Cursor::new(data),
             Some(data_len),
@@ -528,11 +524,8 @@ impl Response<Cursor<Vec<u8>>> {
         let data_len = data.len();
 
         Response::new(
-            StatusCode(200),
-            vec![
-                Header::from_bytes(&b"Content-Type"[..], &b"text/plain; charset=UTF-8"[..])
-                    .unwrap(),
-            ],
+            StatusCode::OK,
+            vec![Header::from_bytes(header::CONTENT_TYPE, b"text/plain; charset=UTF-8").unwrap()],
             Cursor::new(data.into_bytes()),
             Some(data_len),
             None,
