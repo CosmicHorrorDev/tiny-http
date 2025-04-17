@@ -476,7 +476,7 @@ where
     /// Turns this response into a `Response<Box<Read + Send>>`.
     pub fn boxed(self) -> ResponseBox {
         Response {
-            reader: Box::new(self.reader) as Box<dyn Read + Send>,
+            reader: Box::new(self.reader),
             status_code: self.status_code,
             headers: self.headers,
             data_length: self.data_length,
